@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciador de Mamadas</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            max-width: 800px;
+        }
+
+        form {
+            background: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input,
+        select,
+        button {
+            padding: 8px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        button {
+            cursor: pointer;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            margin-top: 10px;
+        }
+
+        button.cancel {
+            background-color: #6c757d;
+            margin-top: 5px;
+        }
+
+        button.delete {
+            background-color: #dc3545;
+            width: auto;
+            padding: 5px 10px;
+        }
+
+        button.edit {
+            background-color: #ffc107;
+            color: black;
+            width: auto;
+            padding: 5px 10px;
+            margin-right: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h2 id="formTitle">Cadastrar Mamada</h2>
+
+    <!-- FORMULÁRIO (POST e PUT) -->
+    <form id="mamadaForm">
+        <input type="hidden" id="mamadaId"> <!-- Guarda o ID ao editar -->
+
+        <div class="form-group">
+            <label for="data_hora">Data e Hora:</label>
+            <input type="datetime-local" id="data_hora" required>
+        </div>
+
+        <div class="form-group">
+            <label for="tipoID">Tipo:</label>
+            <select id="tipoID" required>
+                <option value="1">Mamadeira</option>
+                <option value="2" selected>Natural</option>
+                <option value="3">Colher</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="statusID">Status:</label>
+            <select id="statusID" required>
+                <option value="1" selected>Vazia</option>
+                <option value="2">Metade</option>
+                <option value="3">Cheia</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="quantidade">Quantidade (ml):</label>
+            <input type="number" id="quantidade" placeholder="Ex: 150">
+        </div>
+
+        <button type="submit" id="btnSalvar">Salvar Mamada</button>
+        <button type="button" id="btnCancelar" class="cancel" style="display: none;" onclick="resetForm()">Cancelar
+            Edição</button>
+    </form>
+
+    <hr>
+
+    <h2>Histórico de Mamadas</h2>
+
+    <!-- TABELA (GET) -->
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Data / Hora</th>
+                <th>Tipo ID</th>
+                <th>Status ID</th>
+                <th>Quantidade (ml)</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody id="tabelaMamadas">
+            <!-- Linhas preenchidas dinamicamente via JavaScript -->
+        </tbody>
+    </table>
+
+    <script>
+        // Mapeamentos para exibição amigável
+        const tipos = { 1: 'Mamadeira', 2: 'Natural', 3: 'Colher' };
+        const statusMap = { 1: 'Vazia', 2: 'Metade', 3: 'Cheia' };
+
+        // 1. GET: Buscar e listar mamadas
+        async function carregarMamadas() {
+            try {
+                const response = await fetch('/mamadas');
+                const mamadas = await response.json();
+
+                const tbody = document.getElementById('tabelaMamadas');
+                tbody.innerHTML = '';
+
+                mamadas.forEach(m => {
+                    const row = document.createElement('tr');
+
+                    // Ajusta formato da data para exibição (YYYY-MM-DDTHH:mm para formato legível)
+                    const dataFormatada = m.Data_Hora ? m.Data_Hora.replace('T', ' ') : '-';
+
+                    row.innerHTML = `
+                        <td>${m.MamadaID}</td>
+                        <td>${dataFormatada}</td>
+                        <td>${tipos[m.tipoID] || m.tipoID}</td>
+                        <td>${statusMap[m.statusID] || m.statusID}</td>
+                        <td>${m.Quantidade !== null && m.Quantidade !== undefined ? m.Quantidade + ' ml' : '-'}</td>
+                        <td>
+                            <button class="edit" onclick="prepararEdicao(${m.MamadaID}, '${m.Data_Hora}', ${m.tipoID}, ${m.statusID}, ${m.Quantidade})">Editar</button>
+                            <button class="delete" onclick="deletarMamada(${m.MamadaID})">Excluir</button>
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Erro ao carregar mamadas:', error);
+            }
+        }
+
+        // 2. POST / PUT: Salvar ou Atualizar
+        document.getElementById('mamadaForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const id = document.getElementById('mamadaId').value;
+            const payload = {
+                data_hora: document.getElementById('data_hora').value,
+                tipoID: parseInt(document.getElementById('tipoID').value),
+                statusID: parseInt(document.getElementById('statusID').value),
+                quantidade: document.getElementById('quantidade').value ? parseInt(document.getElementById('quantidade').value) : null
+            };
+
+            const isEdit = id !== '';
+            const url = isEdit ? `/mamadas/${id}` : '/mamadas';
+            const method = isEdit ? 'PUT' : 'POST';
+
+            try {
+                const response = await fetch(url, {
+                    method: method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.message);
+                    resetForm();
+                    carregarMamadas();
+                } else {
+                    alert('Erro ao processar requisição.');
+                }
+            } catch (error) {
+                console.error('Erro de conexão:', error);
+            }
+        });
+
+        // 3. DELETE: Deletar registro
+        async function deletarMamada(id) {
+            if (!confirm(`Deseja realmente excluir a mamada #${id}?`)) return;
+
+            try {
+                const response = await fetch(`/mamadas/${id}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+                if (response.ok) {
+                    alert(result.message);
+                    carregarMamadas();
+                } else {
+                    alert('Erro ao deletar registro.');
+                }
+            } catch (error) {
+                console.error('Erro de conexão:', error);
+            }
+        }
+
+        // Preenche o formulário para edição
+        function prepararEdicao(id, dataHora, tipoID, statusID, quantidade) {
+            document.getElementById('formTitle').innerText = `Editar Mamada #${id}`;
+            document.getElementById('mamadaId').value = id;
+            document.getElementById('data_hora').value = dataHora;
+            document.getElementById('tipoID').value = tipoID;
+            document.getElementById('statusID').value = statusID;
+            document.getElementById('quantidade').value = quantidade !== null && quantidade !== 'null' ? quantidade : '';
+
+            document.getElementById('btnSalvar').innerText = 'Atualizar Mamada';
+            document.getElementById('btnCancelar').style.display = 'block';
+        }
+
+        // Reseta o formulário de volta para criação (POST)
+        function resetForm() {
+            document.getElementById('formTitle').innerText = 'Cadastrar Mamada';
+            document.getElementById('mamadaId').value = '';
+            document.getElementById('mamadaForm').reset();
+            document.getElementById('btnSalvar').innerText = 'Salvar Mamada';
+            document.getElementById('btnCancelar').style.display = 'none';
+        }
+
+        // Carrega os dados assim que a página é aberta
+        carregarMamadas();
+    </script>
+</body>
+
+</html>
